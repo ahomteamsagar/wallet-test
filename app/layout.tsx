@@ -4,6 +4,7 @@ import "./globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import { SolanaProvider } from "./SolanaProvider";
 import EvmProvider from "./EvmProvider";
+import { SuiProvider } from "./SuiProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,7 +33,9 @@ export default function RootLayout({
       >
         <SolanaProvider>
           <EvmProvider>
-            {children}
+            <SuiProvider>
+              {children}
+            </SuiProvider>
           </EvmProvider>
         </SolanaProvider>
       </body>

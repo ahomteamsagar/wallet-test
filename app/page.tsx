@@ -6,6 +6,11 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useBalance, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { parseEther, formatEther } from "viem";
 import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import TOKENLIST from '../tokenList.json';
+import { getQuote } from '../jupiter/quote';
+import { buildTx } from '../jupiter/swap';
+import '@mysten/dapp-kit/dist/index.css';
+import { ConnectButton as SuiConnectButton } from '@mysten/dapp-kit';
 
 export default function Home() {
     const { connection } = useConnection();
@@ -124,6 +129,68 @@ export default function Home() {
         return isConnected && recipientAddress && amount && parseFloat(amount) > 0;
     };
 
+    // --- Jupiter Swap State ---
+    const tokenOptions = Object.entries(TOKENLIST);
+    const [fromToken, setFromToken] = useState('WSOL');
+    const [toToken, setToToken] = useState('USDC');
+    const [swapAmount, setSwapAmount] = useState('');
+    const [quote, setQuote] = useState<any>(null);
+    const [quoteLoading, setQuoteLoading] = useState(false);
+    const [swapLoading, setSwapLoading] = useState(false);
+    const [swapStatus, setSwapStatus] = useState<string | null>(null);
+    const [swapError, setSwapError] = useState<string | null>(null);
+
+    // --- Jupiter Swap Handlers ---
+    const handleGetQuote = async () => {
+        setQuote(null);
+        setSwapError(null);
+        setQuoteLoading(true);
+        try {
+            const decimals = fromToken === 'WSOL' ? 9 : 6; // crude, for demo
+            const amount = Math.floor(Number(swapAmount) * 10 ** decimals);
+            const result = await getQuote({
+                inputMint: TOKENLIST[fromToken as keyof typeof TOKENLIST],
+                outputMint: TOKENLIST[toToken as keyof typeof TOKENLIST],
+                amount,
+                slippageBps: 50,
+                restrictIntermediateTokens: true,
+            });
+            setQuote(result);
+        } catch (e: any) {
+            setSwapError(e.message || 'Failed to get quote');
+        } finally {
+            setQuoteLoading(false);
+        }
+    };
+
+    const handleSwap = async () => {
+        setSwapStatus(null);
+        setSwapError(null);
+        setSwapLoading(true);
+        try {
+            if (!publicKey) throw new Error('Connect your Solana wallet');
+            if (!quote) throw new Error('No quote available');
+            const swapTxBase64 = await buildTx(quote, { publicKey });
+            // Send transaction using wallet adapter
+            const { Transaction, VersionedTransaction } = await import('@solana/web3.js');
+            const swapTxBuffer = Buffer.from(swapTxBase64, 'base64');
+            let transaction;
+            try {
+                transaction = VersionedTransaction.deserialize(swapTxBuffer);
+            } catch {
+                transaction = Transaction.from(swapTxBuffer);
+            }
+            const signature = await sendTransaction(transaction, connection);
+            setSwapStatus('Transaction sent: ' + signature);
+            await connection.confirmTransaction(signature, 'confirmed');
+            setSwapStatus('Swap confirmed! Tx: ' + signature);
+        } catch (e: any) {
+            setSwapError(e.message || 'Swap failed');
+        } finally {
+            setSwapLoading(false);
+        }
+    };
+
     return (
         <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black p-8">
             <div className="max-w-6xl mx-auto space-y-8">
@@ -187,6 +254,24 @@ export default function Home() {
                             <div className="flex flex-col space-y-2">
                                 <WalletMultiButton />
                                 <WalletDisconnectButton />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Sui Wallet Card */}
+                    <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50 shadow-xl">
+                        <div className="space-y-4">
+                            <div className="flex items-center space-x-3 mb-4">
+                                <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center">
+                                    <span className="text-white font-bold text-sm">SUi</span>
+                                </div>
+                                <h2 className="text-xl font-semibold text-white">SUI Network</h2>
+                            </div>
+                            <p className="text-gray-400 text-sm mb-4">
+                                Connect to SUI mainnet, devnet, or testnet
+                            </p>
+                            <div className="flex flex-col space-y-2">
+                                <SuiConnectButton />
                             </div>
                         </div>
                     </div>
@@ -299,6 +384,78 @@ export default function Home() {
                             </div>
                         )}
                     </div>
+                </div>
+
+                {/* --- Jupiter Swap UI --- */}
+                <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-yellow-700/50 shadow-xl mt-8">
+                    <h3 className="text-xl font-semibold text-yellow-300 mb-4">Solana Token Swap (Jupiter)</h3>
+                    <div className="grid md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">From</label>
+                            <select
+                                className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white"
+                                value={fromToken}
+                                onChange={e => setFromToken(e.target.value)}
+                            >
+                                {tokenOptions.map(([symbol]) => (
+                                    <option key={symbol} value={symbol}>{symbol}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">To</label>
+                            <select
+                                className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white"
+                                value={toToken}
+                                onChange={e => setToToken(e.target.value)}
+                            >
+                                {tokenOptions.map(([symbol]) => (
+                                    <option key={symbol} value={symbol}>{symbol}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">Amount</label>
+                            <input
+                                type="number"
+                                className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white"
+                                value={swapAmount}
+                                onChange={e => setSwapAmount(e.target.value)}
+                                placeholder="0.0"
+                                min="0"
+                                step="any"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex space-x-4 mb-4">
+                        <button
+                            className="px-6 py-3 rounded-lg bg-yellow-500 text-black font-bold hover:bg-yellow-400 disabled:opacity-50"
+                            onClick={handleGetQuote}
+                            disabled={quoteLoading || !swapAmount || fromToken === toToken}
+                        >
+                            {quoteLoading ? 'Getting Quote...' : 'Get Quote'}
+                        </button>
+                        <button
+                            className="px-6 py-3 rounded-lg bg-green-500 text-white font-bold hover:bg-green-400 disabled:opacity-50"
+                            onClick={handleSwap}
+                            disabled={swapLoading || !quote}
+                        >
+                            {swapLoading ? 'Swapping...' : 'Swap'}
+                        </button>
+                    </div>
+                    {swapError && <div className="text-red-400 mb-2">{swapError}</div>}
+                    {swapStatus && <div className="text-green-400 mb-2">{swapStatus}</div>}
+                    {quote && (
+                        <div className="bg-gray-800/70 rounded-lg p-4 mt-2">
+                            <div className="text-gray-300 text-sm mb-2">Quote:</div>
+                            <div className="text-white text-lg font-mono">
+                                {Number(quote.outAmount) / 10 ** (toToken === 'WSOL' ? 9 : 6)} {toToken}
+                            </div>
+                            <div className="text-gray-400 text-xs mt-1">
+                                Price Impact: {quote.priceImpactPct ? (Number(quote.priceImpactPct) * 100).toFixed(2) + '%' : 'N/A'}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Features Section */}
