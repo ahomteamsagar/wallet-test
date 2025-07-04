@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* Ensure RainbowKit modal appears above other elements */
+[data-rk] {
+  z-index: 9999 !important;
+}
+
+/* Fix for RainbowKit modal positioning */
+.rainbow-kit-connect {
+  z-index: 9999 !important;
+}
