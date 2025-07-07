@@ -428,6 +428,7 @@ export default function Home() {
                         </div>
                     </div>
 
+                
                     {/* Aptos Wallet Card */}
                     <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50 shadow-xl">
                         <div className="space-y-4">
@@ -441,7 +442,6 @@ export default function Home() {
                                 Connect to Aptos mainnet, devnet, or testnet
                             </p>
                             <div className="flex flex-col space-y-2">
-                                {/* Debug Info */}
                                 <div className="text-xs text-gray-500 mb-2">
                                     Available wallets: {wallets?.length || 0}
                                 </div>
@@ -466,7 +466,6 @@ export default function Home() {
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
-                                        {/* Show available wallets */}
                                         {wallets && wallets.length > 0 ? (
                                             wallets.map((wallet) => (
                                                 <button
